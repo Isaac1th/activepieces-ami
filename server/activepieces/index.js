@@ -27,12 +27,17 @@ function setupActivepieces(io) {
     log.info("Activepieces webhook configured:", config.AP_WEBHOOK_URL);
   }
 
+  // Derive the base URL (origin) from the webhook URL so health checks
+  // hit the Activepieces server itself, not the workflow webhook endpoint.
+  const baseUrl = stats.configured
+    ? new URL(config.AP_WEBHOOK_URL).origin
+    : null;
+
   async function checkHealth() {
     if (!stats.configured) return;
 
     try {
-      // Any HTTP response (even 4xx/405) means the server is reachable
-      await axios.head(config.AP_WEBHOOK_URL, { timeout: 5000 });
+      await axios.get(baseUrl, { timeout: 5000 });
       setReachable(true);
     } catch (err) {
       if (err.response) {
