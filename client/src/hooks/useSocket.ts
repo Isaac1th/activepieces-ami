@@ -35,6 +35,7 @@ export function useSocket(): UseSocketReturn {
     lastSentAt: null,
     lastError: null,
     connected: false,
+    configured: false,
   });
   const [apEvents, setApEvents] = useState<ApEventSent[]>([]);
   const [calls, setCalls] = useState<Record<string, Call>>({});
@@ -102,7 +103,9 @@ export function useSocket(): UseSocketReturn {
     socket.on("ap_status", (data: ApStatus) => {
       setApStatus(data);
       if (data.connected) {
-        addLog("Activepieces webhook configured", "activepieces");
+        addLog("Activepieces webhook active", "activepieces");
+      } else if (data.configured) {
+        addLog("Activepieces webhook unreachable: " + (data.lastError || ""), "error");
       } else {
         addLog("Activepieces webhook not configured: " + (data.lastError || ""), "error");
       }

@@ -14,8 +14,8 @@ export function ActivepiecesPanel({ apStatus, apEvents }: ActivepiecesPanelProps
       <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>
           Activepieces Webhook
-          <span className={`badge ${apStatus.connected ? 'bg-green' : 'bg-red'}`} style={{ marginLeft: '10px' }}>
-            {apStatus.connected ? 'Active' : 'Not Configured'}
+          <span className={`badge ${apStatus.connected ? 'bg-green' : apStatus.configured ? 'bg-yellow' : 'bg-red'}`} style={{ marginLeft: '10px' }}>
+            {apStatus.connected ? 'Active' : apStatus.configured ? 'Unreachable' : 'Not Configured'}
           </span>
         </span>
         <button className="btn btn-secondary" onClick={() => setIsVisible(!isVisible)}>

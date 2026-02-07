@@ -4,6 +4,8 @@ const { createLogger } = require("../utils/logger");
 
 const log = createLogger("Activepieces");
 
+const HEALTH_CHECK_INTERVAL = 30_000; // 30 seconds
+
 function setupActivepieces(io) {
   const stats = {
     sent: 0,
@@ -11,15 +13,62 @@ function setupActivepieces(io) {
     lastSentAt: null,
     lastError: null,
     connected: false,
+    configured: false,
   };
+
+  let healthCheckTimer = null;
 
   // Check if webhook URL is configured
   if (!config.AP_WEBHOOK_URL || config.AP_WEBHOOK_URL.includes("YOUR_FLOW_WEBHOOK_ID")) {
     log.warn("Activepieces webhook URL not configured. Set AP_WEBHOOK_URL in .env");
     stats.lastError = "Webhook URL not configured";
   } else {
-    stats.connected = true;
+    stats.configured = true;
     log.info("Activepieces webhook configured:", config.AP_WEBHOOK_URL);
+  }
+
+  // Derive the base URL (origin) from the webhook URL so health checks
+  // hit the Activepieces server itself, not the workflow webhook endpoint.
+  const baseUrl = stats.configured
+    ? new URL(config.AP_WEBHOOK_URL).origin
+    : null;
+
+  async function checkHealth() {
+    if (!stats.configured) return;
+
+    try {
+      await axios.get(baseUrl, { timeout: 5000 });
+      setReachable(true);
+    } catch (err) {
+      if (err.response) {
+        // Got an HTTP response — server is reachable
+        setReachable(true);
+      } else {
+        // Connection refused, timeout, DNS failure — unreachable
+        setReachable(false, err.message);
+      }
+    }
+  }
+
+  function setReachable(reachable, errorMsg) {
+    const changed = stats.connected !== reachable;
+    stats.connected = reachable;
+    if (!reachable) {
+      stats.lastError = errorMsg || "Activepieces unreachable";
+      if (changed) log.warn("Activepieces unreachable:", stats.lastError);
+    } else {
+      stats.lastError = null;
+      if (changed) log.info("Activepieces is reachable");
+    }
+    if (changed) {
+      io.emit("ap_status", getStats());
+    }
+  }
+
+  // Run initial health check and start periodic checks
+  if (stats.configured) {
+    checkHealth();
+    healthCheckTimer = setInterval(checkHealth, HEALTH_CHECK_INTERVAL);
   }
 
   async function forwardEvent(eventType, data) {
@@ -39,7 +88,7 @@ function setupActivepieces(io) {
 
       stats.sent++;
       stats.lastSentAt = new Date().toISOString();
-      stats.lastError = null;
+      setReachable(true);
 
       log.debug(`[${eventType}] Forwarded to Activepieces`);
       io.emit("ap_event_sent", {
@@ -49,7 +98,11 @@ function setupActivepieces(io) {
       });
     } catch (err) {
       stats.failed++;
-      stats.lastError = err.message;
+      if (!err.response) {
+        setReachable(false, err.message);
+      } else {
+        stats.lastError = err.message;
+      }
 
       log.error(`[${eventType}] Failed to forward:`, err);
       io.emit("ap_event_sent", {
@@ -67,7 +120,7 @@ function setupActivepieces(io) {
             headers: { "Content-Type": "application/json" },
           });
           stats.sent++;
-          stats.lastError = null;
+          setReachable(true);
           log.info(`[${eventType}] Retry succeeded`);
         } catch (retryErr) {
           log.error(`[${eventType}] Retry failed:`, retryErr);
@@ -84,7 +137,11 @@ function setupActivepieces(io) {
     socket.emit("ap_status", getStats());
   }
 
-  return { forwardEvent, getStats, emitStatus };
+  function shutdown() {
+    if (healthCheckTimer) clearInterval(healthCheckTimer);
+  }
+
+  return { forwardEvent, getStats, emitStatus, checkHealth, shutdown };
 }
 
 module.exports = { setupActivepieces };
