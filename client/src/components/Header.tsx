@@ -49,11 +49,11 @@ export function Header({ isConnected, amiStatus, apStatus, onRefresh }: HeaderPr
           </div>
           <span className="connection-subtitle">{subtitle}</span>
         </div>
-        <div className={`connection-status ${apStatus.connected ? 'connected' : 'disconnected'}`}>
+        <div className={`connection-status ${apStatus.connected ? 'connected' : apStatus.configured ? 'partial' : 'disconnected'}`}>
           <div className="connection-main">
             <span className="connection-dot"></span>
             <span className="connection-label">
-              {apStatus.connected ? 'AP Webhook' : 'AP Not Set'}
+              {apStatus.connected ? 'AP Webhook' : apStatus.configured ? 'AP Unreachable' : 'AP Not Set'}
             </span>
           </div>
           <span className="connection-subtitle">

@@ -37,6 +37,7 @@ export interface ApStatus {
   lastSentAt: string | null;
   lastError: string | null;
   connected: boolean;
+  configured: boolean;
 }
 
 export interface ApEventSent {
